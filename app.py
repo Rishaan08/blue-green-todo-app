@@ -1,7 +1,7 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
-import sqlite3
+from flask import Flask, jsonify, render_template, request, redirect, url_for
 import os
-from datetime import datetime
+import socket
+import sqlite3
 
 app = Flask(__name__)
 
@@ -27,7 +27,7 @@ def get_db_connection():
     return conn
 
 @app.route('/')
-def index():
+def home():
     conn = get_db_connection()
     todos = conn.execute('SELECT * FROM todos ORDER BY created_at DESC').fetchall()
     conn.close()
@@ -41,7 +41,7 @@ def add_todo():
         conn.execute('INSERT INTO todos (task) VALUES (?)', (task,))
         conn.commit()
         conn.close()
-    return redirect(url_for('index'))
+    return redirect(url_for('home'))
 
 @app.route('/toggle/<int:todo_id>')
 def toggle_todo(todo_id):
@@ -52,7 +52,7 @@ def toggle_todo(todo_id):
         conn.execute('UPDATE todos SET completed = ? WHERE id = ?', (new_status, todo_id))
         conn.commit()
     conn.close()
-    return redirect(url_for('index'))
+    return redirect(url_for('home'))
 
 @app.route('/delete/<int:todo_id>')
 def delete_todo(todo_id):
@@ -60,7 +60,7 @@ def delete_todo(todo_id):
     conn.execute('DELETE FROM todos WHERE id = ?', (todo_id,))
     conn.commit()
     conn.close()
-    return redirect(url_for('index'))
+    return redirect(url_for('home'))
 
 @app.route('/health')
 def health():
@@ -72,6 +72,20 @@ def api_todos():
     todos = conn.execute('SELECT * FROM todos ORDER BY created_at DESC').fetchall()
     conn.close()
     return jsonify([dict(row) for row in todos])
+
+@app.route('/api/stats')
+def api_stats():
+    conn = get_db_connection()
+    total = conn.execute('SELECT COUNT(*) as count FROM todos').fetchone()['count']
+    completed = conn.execute('SELECT COUNT(*) as count FROM todos WHERE completed = 1').fetchone()['count']
+    conn.close()
+    return jsonify({
+        'total': total,
+        'completed': completed,
+        'active': total - completed,
+        'version': VERSION,
+        'environment': ENV_COLOR
+    })
 
 if __name__ == '__main__':
     init_db()
