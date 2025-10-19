@@ -129,7 +129,7 @@ pipeline {
                         POD_NAME=\$(kubectl get pods -l version=${env.TARGET_ENV} -o jsonpath='{.items[0].metadata.name}')
                         
                         echo "Testing health endpoint on pod: \$POD_NAME"
-                        kubectl exec \$POD_NAME -- curl -f http://localhost:5000/health || exit 1
+                        kubectl exec \$POD_NAME -- python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" || exit 1
                         
                         echo "✓ ${env.TARGET_ENV} environment is healthy!"
                     """
