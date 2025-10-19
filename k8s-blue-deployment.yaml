@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-app-blue
+  labels:
+    app: todo-app
+    version: blue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: todo-app
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: todo-app
+        version: blue
+    spec:
+      containers:
+      - name: todo-app
+        image: rishaan03/todo-app:latest
+        ports:
+        - containerPort: 5000
+        env:
+        - name: APP_VERSION
+          value: "blue-1.0"
+        - name: ENV_COLOR
+          value: "blue"
+        - name: PORT
+          value: "5000"
+        volumeMounts:
+        - name: todo-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: todo-data
+        emptyDir: {}

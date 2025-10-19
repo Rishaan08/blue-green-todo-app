@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blue-Green Todo App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: {% if env_color == 'green' %}linear-gradient(135deg, #11998e 0%, #38ef7d 100%){% else %}linear-gradient(135deg, #667eea 0%, #764ba2 100%){% endif %};
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .version-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        .env-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: {% if env_color == 'green' %}#38ef7d{% else %}#667eea{% endif %};
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .form-container {
+            padding: 30px;
+        }
+        .todo-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        .todo-input {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: border 0.3s;
+        }
+        .todo-input:focus {
+            outline: none;
+            border-color: {% if env_color == 'green' %}#38ef7d{% else %}#667eea{% endif %};
+        }
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .btn-add {
+            background: {% if env_color == 'green' %}linear-gradient(135deg, #11998e 0%, #38ef7d 100%){% else %}linear-gradient(135deg, #667eea 0%, #764ba2 100%){% endif %};
+            color: white;
+        }
+        .btn-add:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .todo-list {
+            list-style: none;
+        }
+        .todo-item {
+            background: #f8f9fa;
+            padding: 20px;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s;
+        }
+        .todo-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        .todo-item.completed {
+            background: #e8f5e9;
+            opacity: 0.7;
+        }
+        .todo-item.completed .todo-text {
+            text-decoration: line-through;
+            color: #999;
+        }
+        .todo-text {
+            flex: 1;
+            font-size: 1.1em;
+            color: #333;
+        }
+        .todo-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn-small {
+            padding: 8px 15px;
+            font-size: 0.9em;
+            border-radius: 8px;
+        }
+        .btn-toggle {
+            background: #4caf50;
+            color: white;
+        }
+        .btn-delete {
+            background: #f44336;
+            color: white;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="env-indicator">{{ env_color|upper }} Environment</div>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Blue-Green Todo App</h1>
+            <div class="version-badge">Version {{ version }}</div>
+        </div>
+        <div class="form-container">
+            <form class="todo-form" action="/add" method="POST">
+                <input type="text" name="task" class="todo-input" placeholder="Add a new task..." required>
+                <button type="submit" class="btn btn-add">Add Task</button>
+            </form>
+            
+            {% if todos %}
+            <ul class="todo-list">
+                {% for todo in todos %}
+                <li class="todo-item {% if todo.completed %}completed{% endif %}">
+                    <span class="todo-text">{{ todo.task }}</span>
+                    <div class="todo-actions">
+                        <a href="/toggle/{{ todo.id }}" class="btn btn-small btn-toggle">
+                            {% if todo.completed %}Undo{% else %}Done{% endif %}
+                        </a>
+                        <a href="/delete/{{ todo.id }}" class="btn btn-small btn-delete">Delete</a>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/>
+                </svg>
+                <h3>No tasks yet!</h3>
+                <p>Add your first task to get started</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
