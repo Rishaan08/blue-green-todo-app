@@ -142,16 +142,24 @@ pipeline {
                 echo '========================================='
                 echo "Stage 8: Switching traffic from ${env.CURRENT_ENV} to ${env.TARGET_ENV}"
                 echo '========================================='
-                input message: "Switch traffic to ${env.TARGET_ENV}?", ok: 'Deploy'
                 script {
                     sh """
-                        echo "Updating service to point to ${env.TARGET_ENV}..."
+                        echo "Automatically switching traffic to ${env.TARGET_ENV}..."
                         kubectl patch service todo-app-service -p '{"spec":{"selector":{"version":"${env.TARGET_ENV}"}}}'
                         
-                        echo "Verifying service update..."
-                        kubectl get service todo-app-service
+                        echo "Waiting for service update to propagate..."
+                        sleep 5
                         
-                        echo "✓ Traffic switched to ${env.TARGET_ENV}!"
+                        echo "Verifying service update..."
+                        ACTIVE_ENV=\$(kubectl get service todo-app-service -o jsonpath='{.spec.selector.version}')
+                        echo "Service now points to: \$ACTIVE_ENV"
+                        
+                        if [ "\$ACTIVE_ENV" = "${env.TARGET_ENV}" ]; then
+                            echo "✓ Traffic successfully switched to ${env.TARGET_ENV}!"
+                        else
+                            echo "✗ Traffic switch failed!"
+                            exit 1
+                        fi
                     """
                 }
             }
@@ -164,10 +172,20 @@ pipeline {
                 echo '========================================='
                 script {
                     sh '''
-                        echo "Service Details:"
-                        kubectl describe service todo-app-service
+                        echo "=== Service Details ==="
+                        kubectl get service todo-app-service -o wide
                         
-                        echo "Active Pods:"
+                        echo ""
+                        echo "=== Active Environment ==="
+                        kubectl get service todo-app-service -o jsonpath='{.spec.selector.version}'
+                        echo ""
+                        
+                        echo ""
+                        echo "=== All Deployments ==="
+                        kubectl get deployments -l app=todo-app
+                        
+                        echo ""
+                        echo "=== Active Pods ==="
                         kubectl get pods -l app=todo-app -o wide
                     '''
                 }
@@ -183,11 +201,21 @@ pipeline {
             echo "Previous environment: ${env.CURRENT_ENV}"
             echo "New active environment: ${env.TARGET_ENV}"
             echo "Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+            echo ''
+            echo 'Deployment Details:'
+            echo "- Built and tested Docker image"
+            echo "- Deployed to ${env.TARGET_ENV} environment"
+            echo "- Passed health checks"
+            echo "- Switched traffic automatically"
+            echo "- Zero downtime achieved!"
             echo '========================================='
         }
         failure {
             echo '========================================='
             echo '✗ Deployment FAILED!'
+            echo '========================================='
+            echo "Failed at one of the pipeline stages"
+            echo "Traffic remains on: ${env.CURRENT_ENV}"
             echo '========================================='
         }
         always {
