@@ -1,12 +1,12 @@
 pipeline {
-    agent any
+    agent {
+        label 'built-in'
+    }
     
     environment {
         DOCKER_IMAGE = "rishaan03/todo-app"
         DOCKER_CREDENTIALS = 'dockerhub-credentials'
         DOCKER_TAG = "${BUILD_NUMBER}"
-        KUBECONFIG = "${HOME}/.kube/config"
-        CURRENT_ENV = 'blue'
     }
     
     stages {
@@ -30,10 +30,10 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     
-                    CURRENT_ENV = serviceSelector ?: 'blue'
-                    env.TARGET_ENV = (CURRENT_ENV == 'blue') ? 'green' : 'blue'
+                    env.CURRENT_ENV = serviceSelector ?: 'blue'
+                    env.TARGET_ENV = (env.CURRENT_ENV == 'blue') ? 'green' : 'blue'
                     
-                    echo "Current environment: ${CURRENT_ENV}"
+                    echo "Current environment: ${env.CURRENT_ENV}"
                     echo "Target deployment environment: ${env.TARGET_ENV}"
                 }
             }
@@ -45,8 +45,8 @@ pipeline {
                 echo 'Stage 3: Building Docker image'
                 echo '========================================='
                 script {
-                    dockerImage = docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
-                    docker.build("${DOCKER_IMAGE}:latest")
+                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                    sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
                 }
             }
         }
@@ -71,8 +71,8 @@ pipeline {
                         curl -f http://localhost:5001/ || exit 1
                         
                         echo "Cleaning up test container..."
-                        docker stop test-todo-app
-                        docker rm test-todo-app
+                        docker stop test-todo-app || true
+                        docker rm test-todo-app || true
                         
                         echo "✓ All tests passed!"
                     '''
@@ -86,9 +86,12 @@ pipeline {
                 echo 'Stage 5: Pushing to Docker Hub'
                 echo '========================================='
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', DOCKER_CREDENTIALS) {
-                        dockerImage.push("${DOCKER_TAG}")
-                        dockerImage.push("latest")
+                    withCredentials([usernamePassword(credentialsId: DOCKER_CREDENTIALS, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh '''
+                            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                            docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                            docker push ${DOCKER_IMAGE}:latest
+                        '''
                     }
                 }
             }
@@ -137,7 +140,7 @@ pipeline {
         stage('Switch Traffic') {
             steps {
                 echo '========================================='
-                echo "Stage 8: Switching traffic from ${CURRENT_ENV} to ${env.TARGET_ENV}"
+                echo "Stage 8: Switching traffic from ${env.CURRENT_ENV} to ${env.TARGET_ENV}"
                 echo '========================================='
                 input message: "Switch traffic to ${env.TARGET_ENV}?", ok: 'Deploy'
                 script {
@@ -146,7 +149,7 @@ pipeline {
                         kubectl patch service todo-app-service -p '{"spec":{"selector":{"version":"${env.TARGET_ENV}"}}}'
                         
                         echo "Verifying service update..."
-                        kubectl get service todo-app-service -o yaml
+                        kubectl get service todo-app-service
                         
                         echo "✓ Traffic switched to ${env.TARGET_ENV}!"
                     """
@@ -164,11 +167,8 @@ pipeline {
                         echo "Service Details:"
                         kubectl describe service todo-app-service
                         
-                        echo "\nActive Pods:"
+                        echo "Active Pods:"
                         kubectl get pods -l app=todo-app -o wide
-                        
-                        echo "\nApplication URL:"
-                        minikube service todo-app-service --url
                     '''
                 }
             }
@@ -180,17 +180,15 @@ pipeline {
             echo '========================================='
             echo '✓ Blue-Green Deployment SUCCESS!'
             echo '========================================='
-            echo "Previous environment: ${CURRENT_ENV}"
+            echo "Previous environment: ${env.CURRENT_ENV}"
             echo "New active environment: ${env.TARGET_ENV}"
             echo "Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-            echo "Access: minikube service todo-app-service --url"
             echo '========================================='
         }
         failure {
             echo '========================================='
             echo '✗ Deployment FAILED!'
             echo '========================================='
-            echo "Keeping ${CURRENT_ENV} environment active"
         }
         always {
             echo 'Cleaning up Docker resources...'
